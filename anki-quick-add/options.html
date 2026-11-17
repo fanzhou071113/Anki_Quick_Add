@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anki Quick Add 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Anki Quick Add</h1>
+    <p class="intro">选中文字后右键“添加到 Anki”。API 关闭时会直接添加原文。</p>
+
+    <section aria-labelledby="anki-heading">
+      <h2 id="anki-heading">Anki</h2>
+      <label for="anki-url">AnkiConnect URL</label>
+      <input id="anki-url" type="url" value="http://127.0.0.1:8765" spellcheck="false">
+      <label for="deck">目标卡组</label>
+      <div class="row"><input id="deck" list="decks" placeholder="例如：Deutsch"><datalist id="decks"></datalist><button id="refresh-decks" type="button">刷新</button></div>
+      <label for="model">Note Type</label>
+      <div class="row"><input id="model" list="models" placeholder="例如：Basic"><datalist id="models"></datalist><button id="refresh-models" type="button">刷新</button></div>
+      <label for="original-field">Original Text Field</label>
+      <div class="row"><input id="original-field" list="fields" placeholder="例如：Front"><button id="refresh-fields" type="button">刷新字段</button></div>
+      <label for="instruction-field">Instruction Field</label>
+      <input id="instruction-field" list="fields" placeholder="例如：Category">
+      <datalist id="fields"></datalist>
+    </section>
+
+    <section aria-labelledby="api-heading">
+      <h2 id="api-heading">External API</h2>
+      <label class="check"><input id="api-enabled" type="checkbox"> 启用 External API</label>
+      <label for="api-endpoint">API Endpoint</label>
+      <input id="api-endpoint" type="url" placeholder="https://example.com/api">
+      <label for="api-key">API Key</label>
+      <div class="row"><input id="api-key" type="password" autocomplete="new-password" placeholder="留空保持已保存的密钥"><button id="clear-key" type="button">清除密钥</button></div>
+      <label for="prompt">Prompt <span class="help">支持 {{text}} 代表选中文字</span></label>
+      <textarea id="prompt" rows="5" placeholder="例如：判断 {{text}} 的词性，只返回分类名称。"></textarea>
+      <p class="hint">请求以 JSON 发送 text、prompt、deck、noteType，并使用 Bearer API Key。API Key 仅保存在本机浏览器。HTTPS 可用于公网 API；HTTP 仅允许本机或局域网地址。</p>
+    </section>
+
+    <button id="save" class="primary" type="button">保存设置</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="external-api/network-policy.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
