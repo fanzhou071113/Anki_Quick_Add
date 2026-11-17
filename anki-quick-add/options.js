@@ -1,121 +1,19 @@
-const DEFAULTS = {
-  deck: "", model: "", field: "", ankiUrl: "http://127.0.0.1:8765",
-  originalTextField: "", instructionField: "", apiEnabled: false, apiEndpoint: "", prompt: ""
-};
-const $ = (id) => document.getElementById(id);
-const status = (message, bad = false) => {
-  $("status").textContent = message;
-  $("status").style.color = bad ? "#c0392b" : "#218838";
-};
-
-async function invoke(action, params = {}) {
-  const response = await fetch($("anki-url").value.trim() || DEFAULTS.ankiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, version: 6, params })
-  });
-  if (!response.ok) throw new Error(`AnkiConnect returned HTTP ${response.status}`);
-  const data = await response.json();
-  if (data.error) throw new Error(data.error);
-  return data.result;
-}
-function setList(id, values) {
-  $(id).replaceChildren(...values.map((value) => {
-    const option = document.createElement("option");
-    option.value = value;
-    return option;
-  }));
-}
-async function guarded(work) {
-  try { await work(); }
-  catch (error) { status(error instanceof TypeError ? "Could not connect to AnkiConnect" : error.message, true); }
-}
-function endpointPermission(endpoint) {
-  return AnkiNetworkPolicy.permissionPattern(endpoint);
-}
-function ankiPermission(endpoint) {
-  let url;
-  try { url = new URL(endpoint); } catch { throw new Error("AnkiConnect URL is invalid"); }
-  const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
-  if (!local || url.protocol !== "http:") {
-    throw new Error("AnkiConnect must use HTTP on this computer (localhost or 127.0.0.1)");
-  }
-  return `${url.origin}/*`;
-}
-
-chrome.storage.sync.get(DEFAULTS, (settings) => {
-  $("anki-url").value = settings.ankiUrl || DEFAULTS.ankiUrl;
-  $("deck").value = settings.deck;
-  $("model").value = settings.model;
-  $("original-field").value = settings.originalTextField || settings.field;
-  $("instruction-field").value = settings.instructionField;
-  $("api-enabled").checked = Boolean(settings.apiEnabled);
-  $("api-endpoint").value = settings.apiEndpoint;
-  $("prompt").value = settings.prompt;
-  chrome.storage.local.get({ apiKey: "" }, ({ apiKey }) => {
-    $("api-key").placeholder = apiKey ? "已保存（留空保持现有密钥）" : "粘贴 API Key";
-  });
-});
-$("refresh-decks").addEventListener("click", () => guarded(async () => {
-  setList("decks", await invoke("deckNames"));
-  status("Deck list updated");
-}));
-$("refresh-models").addEventListener("click", () => guarded(async () => {
-  setList("models", await invoke("modelNames"));
-  status("Note type list updated");
-}));
-$("refresh-fields").addEventListener("click", () => guarded(async () => {
-  const model = $("model").value.trim();
-  if (!model) throw new Error("Enter or choose a note type first");
-  setList("fields", await invoke("modelFieldNames", { modelName: model }));
-  status("Field list updated");
-}));
-$("model").addEventListener("change", () => $("refresh-fields").click());
-$("clear-key").addEventListener("click", () => {
-  chrome.storage.local.remove("apiKey", () => {
-    $("api-key").value = "";
-    $("api-key").placeholder = "粘贴 API Key";
-    status("Saved API Key cleared");
-  });
-});
-$("save").addEventListener("click", async () => {
-  const settings = {
-    deck: $("deck").value.trim(),
-    model: $("model").value.trim(),
-    ankiUrl: $("anki-url").value.trim() || DEFAULTS.ankiUrl,
-    originalTextField: $("original-field").value.trim(),
-    instructionField: $("instruction-field").value.trim(),
-    apiEnabled: $("api-enabled").checked,
-    apiEndpoint: $("api-endpoint").value.trim(),
-    prompt: $("prompt").value.trim()
-  };
-  if (!settings.deck || !settings.model) return status("Set a target deck and note type", true);
-
-  const origins = [];
-  try {
-    const ankiOrigin = ankiPermission(settings.ankiUrl);
-    if (!["http://127.0.0.1:8765/*", "http://localhost:8765/*"].includes(ankiOrigin)) origins.push(ankiOrigin);
-    if (settings.apiEnabled) {
-      if (!settings.apiEndpoint) return status("API endpoint is not set", true);
-      if (!settings.prompt) return status("Prompt is not set", true);
-      origins.push(endpointPermission(settings.apiEndpoint));
-    }
-  } catch (error) { return status(error.message, true); }
-
-  if (origins.length) {
-    const granted = await chrome.permissions.request({ origins: [...new Set(origins)] });
-    if (!granted) return status("Permission for the configured endpoint was not granted", true);
-  }
-  chrome.storage.sync.set(settings, () => {
-    const key = $("api-key").value.trim();
-    const finish = () => {
-      $("api-key").value = "";
-      chrome.storage.local.get({ apiKey: "" }, ({ apiKey }) => {
-        $("api-key").placeholder = apiKey ? "已保存（留空保持现有密钥）" : "粘贴 API Key";
-      });
-      status("Settings saved");
-    };
-    if (key) chrome.storage.local.set({ apiKey: key }, finish);
-    else finish();
-  });
-});
+const DEFAULTS={deck:"",model:"",field:"",ankiUrl:"http://127.0.0.1:8765",originalTextField:"",instructionField:"",apiEnabled:false,apiEndpoint:"",prompt:""};const $=id=>document.getElementById(id);
+const status=(msg,bad=false)=>{$("status").textContent=msg;$("status").style.color=bad?"#c0392b":"#218838";};
+async function invoke(action,params={}){const r=await fetch($("anki-url").value.trim()||DEFAULTS.ankiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,version:6,params})});if(!r.ok)throw new Error("AnkiConnect returned HTTP "+r.status);const d=await r.json();if(d.error)throw new Error(d.error);return d.result;}
+function setList(id,values){$(id).replaceChildren(...values.map(value=>{const o=document.createElement("option");o.value=value;return o;}));}
+async function guarded(work){try{await work();}catch(e){status(e instanceof TypeError?"Could not connect to AnkiConnect":e.message,true);}}
+function endpointPermission(endpoint){return AnkiNetworkPolicy.permissionPattern(endpoint);}
+function ankiPermission(endpoint){let u;try{u=new URL(endpoint);}catch{throw new Error("AnkiConnect URL is invalid");}if(!["localhost","127.0.0.1","::1","[::1]"].includes(u.hostname)||u.protocol!=="http:")throw new Error("AnkiConnect must use HTTP on localhost");return u.origin+"/*";}
+chrome.storage.sync.get(DEFAULTS,s=>{$("anki-url").value=s.ankiUrl||DEFAULTS.ankiUrl;$("deck").value=s.deck;$("model").value=s.model;$("original-field").value=s.originalTextField||s.field;$("instruction-field").value=s.instructionField;$("api-enabled").checked=!!s.apiEnabled;$("api-endpoint").value=s.apiEndpoint;$("prompt").value=s.prompt;chrome.storage.local.get({apiKey:""},({apiKey})=>$("api-key").placeholder=apiKey?"已保存（留空保持现有密钥）":"粘贴 API Key");});
+$("refresh-decks").onclick=()=>guarded(async()=>{setList("decks",await invoke("deckNames"));status("Deck list updated");});
+$("refresh-models").onclick=()=>guarded(async()=>{setList("models",await invoke("modelNames"));status("Note type list updated");});
+$("refresh-fields").onclick=()=>guarded(async()=>{const model=$("model").value.trim();if(!model)throw new Error("Enter or choose a note type first");setList("fields",await invoke("modelFieldNames",{modelName:model}));status("Field list updated");});
+$("model").onchange=()=>$("refresh-fields").click();
+$("clear-key").onclick=()=>chrome.storage.local.remove("apiKey",()=>{$("api-key").value="";$("api-key").placeholder="粘贴 API Key";status("Saved API Key cleared");});
+function currentSettings(){return {deck:$("deck").value.trim(),model:$("model").value.trim(),ankiUrl:$("anki-url").value.trim()||DEFAULTS.ankiUrl,originalTextField:$("original-field").value.trim(),instructionField:$("instruction-field").value.trim(),apiEnabled:$("api-enabled").checked,apiEndpoint:$("api-endpoint").value.trim(),prompt:$("prompt").value};}
+function addStep(step){const li=document.createElement("li");li.textContent=step.label+": "+step.state+(step.detail?" — "+step.detail:"");if(step.state==="error")li.className="error";$("diagnostic-steps").append(li);}
+async function preparePermission(s,includeAnki){const origins=[endpointPermission(s.apiEndpoint)];if(includeAnki)origins.push(ankiPermission(s.ankiUrl));const missing=[];for(const origin of origins)if(!(await chrome.permissions.contains({origins:[origin]})))missing.push(origin);if(missing.length&&!(await chrome.permissions.request({origins:missing})))throw new Error("Endpoint permission was not granted");}
+async function runDiagnostic(full){const buttons=[$("test-connection"),$("test-flow")];buttons.forEach(b=>b.disabled=true);$("diagnostics").hidden=false;$("diagnostic-steps").replaceChildren();$("raw-response").textContent="";$("mapped-fields-wrap").hidden=true;$("diagnostic-title").textContent=full?"Test Full Flow":"Test Connection";let apiKey="";try{const s=currentSettings();const stored=await chrome.storage.local.get({apiKey:""});apiKey=$("api-key").value.trim()||stored.apiKey;if(!s.apiEndpoint)throw new Error("API endpoint is not set");await preparePermission(s,full);const onStep=addStep;if(full){const result=await AnkiDiagnostics.testFullFlow({settings:s,apiKey,text:"der Mann",ankiInvoke:invoke});result.steps.forEach(addStep);$("raw-response").textContent=AnkiDiagnostics.safe(result.result.rawResponse,[apiKey]);$("mapped-fields").textContent=JSON.stringify(result.fields,null,2);$("mapped-fields-wrap").hidden=false;$("diagnostic-title").textContent="检查通过：没有创建 Anki 笔记";}else{const rendered=AnkiPrompt.render(s.prompt,"der Mann");$("prompt").dataset.testRendered=rendered;const result=await AnkiDiagnostics.testConnection({endpoint:s.apiEndpoint,apiKey,text:"der Mann",prompt:rendered,deck:s.deck,noteType:s.model,onStep});$("raw-response").textContent=AnkiDiagnostics.safe(result.result.rawResponse,[apiKey]);$("diagnostic-title").textContent="External API 连接与解析成功";}}catch(e){if(e.diagnostics)e.diagnostics.forEach(addStep);const api=e.apiResult;const raw=api?.rawResponse||e.rawResponse;if(raw)$("raw-response").textContent=AnkiDiagnostics.safe(raw,[apiKey]);$("diagnostic-title").textContent="检查失败："+AnkiDiagnostics.safe(e.message,[apiKey]);if(!$("diagnostic-steps").children.length)addStep({label:e.stage||"Configuration",state:"error",detail:AnkiDiagnostics.safe(e.message,[apiKey])});else addStep({label:e.stage||"Flow",state:"error",detail:AnkiDiagnostics.safe(e.message,[apiKey])});}finally{buttons.forEach(b=>b.disabled=false);}}
+$("test-connection").onclick=()=>runDiagnostic(false);$("test-flow").onclick=()=>runDiagnostic(true);
+$("save").onclick=async()=>{const s=currentSettings();if(!s.deck||!s.model)return status("Set a target deck and note type",true);const origins=[];try{const a=ankiPermission(s.ankiUrl);if(!["http://127.0.0.1:8765/*","http://localhost:8765/*"].includes(a))origins.push(a);if(s.apiEnabled){if(!s.apiEndpoint)throw new Error("API endpoint is not set");if(!s.prompt.trim())throw new Error("Prompt is not set");origins.push(endpointPermission(s.apiEndpoint));}}catch(e){return status(e.message,true);}if(origins.length&&!(await chrome.permissions.request({origins:[...new Set(origins)]})))return status("Endpoint permission was not granted",true);chrome.storage.sync.set(s,()=>{const key=$("api-key").value.trim();const done=()=>{$("api-key").value="";chrome.storage.local.get({apiKey:""},({apiKey})=>$("api-key").placeholder=apiKey?"已保存（留空保持现有密钥）":"粘贴 API Key");status("Settings saved");};if(key)chrome.storage.local.set({apiKey:key},done);else done();});};

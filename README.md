@@ -1,8 +1,7 @@
 # Anki_Quick_Add
-A light weight addon for Chrome for creating Anki flashcard
 
-## 插件项目
+Anki Quick Add is a lightweight Chrome Manifest V3 extension for adding selected text to Anki.
 
-完整的 Chrome 扩展源码位于 `anki-quick-add/`，可直接在 Chrome 中加载该目录。可下载仓库根目录的 `anki-quick-add-v1.2.0.zip` 单独安装。
+The complete extension source is in [anki-quick-add/](anki-quick-add/). Download [anki-quick-add-v1.3.0.zip](anki-quick-add-v1.3.0.zip) to install it unpacked in Chrome.
 
-External API 支持 Prompt 的 `{{text}}` 变量，并将 API 返回指示值映射到 Anki Instruction Field。HTTPS 用于公网 API；HTTP 支持本机和局域网 API。
+External API supports prompt substitution with `{{text}}`, HTTP for local/LAN endpoints, and local diagnostic checks. Test Full Flow verifies API response parsing, AnkiConnect, target deck/note type, and field mapping without creating a note.
