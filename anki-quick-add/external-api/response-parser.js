@@ -1,16 +1,13 @@
 (function(root){
-  function value(v){return typeof v==="string"?v.trim():(typeof v==="number"||typeof v==="boolean"?String(v):"");}
-  function fromObject(d){if(!d||typeof d!=="object")return "";for(const k of ["instructionValue","result","value","output_text"]){const x=value(d[k]);if(x)return x;}const n=value(d.data?.result)||value(d.data?.instructionValue);if(n)return n;const c=d.choices?.[0]?.message?.content;return typeof c==="string"?c.trim():"";}
-  function parseDetailed(payload){
-    const raw=typeof payload==="string"?payload:String(payload??"");const trimmed=raw.trim();if(!trimmed)throw Object.assign(new Error("External API returned an empty result"),{code:"empty-result",rawResponse:raw});
-    let parsed,format="text";
-    if(typeof payload==="string"&&(trimmed.startsWith("{")||trimmed.startsWith("["))){try{parsed=JSON.parse(trimmed);format="json";}catch(e){throw Object.assign(new Error("External API returned invalid JSON"),{code:"invalid-json",rawResponse:raw});}}
-    else if(typeof payload!=="string"){parsed=payload;format="json";}
-    else if(trimmed.startsWith('"')){try{parsed=JSON.parse(trimmed);format="json";}catch{parsed=trimmed;}}
-    const result=format==="json"?(typeof parsed==="string"?parsed.trim():fromObject(parsed)):trimmed;
-    if(!result)throw Object.assign(new Error("External API response did not contain a supported result field"),{code:"missing-result",rawResponse:raw,parsedResponse:parsed});
-    return {instructionValue:result,rawResponse:raw,parsedResponse:parsed,format};
+  function parsePayload(payload){if(typeof payload==="string"){try{return JSON.parse(payload);}catch(e){throw Object.assign(new Error("API returned invalid JSON"),{stage:"api_json",cause:e});}}if(!payload||typeof payload!=="object")throw Object.assign(new Error("API response is not a JSON object"),{stage:"api_json"});return payload;}
+  function extractText(value){if(typeof value==="string")return value.trim();if(Array.isArray(value))return value.map(part=>typeof part==="string"?part:(part?.text||"")).join("").trim();return "";}
+  function parseApiResponse(payload,provider="openai"){const data=parsePayload(payload);if(data.error){const message=typeof data.error==="string"?data.error:(data.error.message||JSON.stringify(data.error));throw Object.assign(new Error("Model error: "+message),{stage:"api_model",rawResponse:typeof payload==="string"?payload:JSON.stringify(payload)});}
+    let result="";if(provider==="openai"){const choices=data.choices;if(Array.isArray(choices)&&choices[0])result=extractText(choices[0]?.message?.content);else throw Object.assign(new Error("OpenAI-compatible response is missing choices[0].message.content"),{stage:"api_parse"});}
+    else if(provider==="ollama"){result=extractText(data?.message?.content);if(!result)throw Object.assign(new Error("Ollama response is missing message.content"),{stage:"api_parse"});}
+    else throw Object.assign(new Error("Unsupported API provider: "+provider),{stage:"api_config"});
+    if(!result)throw Object.assign(new Error("Model returned an empty response"),{stage:"api_parse"});return {instructionValue:result,parsedResponse:data,rawResponse:typeof payload==="string"?payload:JSON.stringify(payload),provider};
   }
-  const api={parse(payload){return parseDetailed(payload).instructionValue;},parseDetailed};
-  root.AnkiResponseParser=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
+  // Retain the legacy parser export for existing core callers; API traffic always uses provider-specific parsing.
+  function parseLegacy(payload){const data=typeof payload==="string"?(()=>{try{return JSON.parse(payload);}catch{return payload;}})():payload;if(typeof data==="string"){if(!data.trim())throw new Error("External API returned an empty result");return data.trim();}for(const k of ["instructionValue","result","value","output_text"])if(typeof data?.[k]==="string"&&data[k].trim())return data[k].trim();const nested=data?.data?.result||data?.data?.instructionValue||data?.choices?.[0]?.message?.content;if(typeof nested==="string"&&nested.trim())return nested.trim();throw new Error("External API returned an unsupported response format");}
+  const api={parse:parseLegacy,parseDetailed:parseApiResponse,parseApiResponse};root.AnkiResponseParser=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(globalThis);

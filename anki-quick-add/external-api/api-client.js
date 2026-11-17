@@ -1,24 +1,25 @@
 (function(root){
   function fail(message,stage,extra={}){return Object.assign(new Error(message),{stage,...extra});}
-  function safeEndpoint(endpoint){try{const u=new URL(endpoint);u.username="";u.password="";for(const k of [...u.searchParams.keys()])if(/key|token|secret|auth/i.test(k))u.searchParams.set(k,"[redacted]");return u.toString();}catch{return "[invalid endpoint]";}}
-  async function requestDetailed({endpoint,apiKey,text,prompt,deck,noteType,onStep}){
+  function now(){return typeof performance!=="undefined"&&performance.now?performance.now():Date.now();}
+  function safeEndpoint(value){try{const u=new URL(value);u.username="";u.password="";for(const k of [...u.searchParams.keys()])if(/key|token|secret|auth/i.test(k))u.searchParams.set(k,"[redacted]");u.hash="";return u.toString();}catch{return "[invalid endpoint]";}}
+  function log(tag,data){try{root.AnkiDebugLog?.write(tag,data);}catch{}}
+  function buildApiRequest({provider="openai",model,prompt}){if(!String(model||"").trim())throw fail("Model is required","api_config");if(provider==="openai")return {model:String(model).trim(),temperature:0.7,messages:[{role:"user",content:String(prompt||"")}],stream:false};if(provider==="ollama")return {model:String(model).trim(),messages:[{role:"user",content:String(prompt||"")}],stream:false,options:{temperature:0.7}};throw fail("Unsupported API provider","api_config");}
+  async function requestDetailed({endpoint,provider="openai",apiKey="",model,prompt,text="",deck="",noteType="",onStep,timeoutMs=60000}){
     const step=(id,label,state,detail="")=>{try{onStep?.({id,label,state,detail});}catch{}};
-    let url;try{url=root.AnkiNetworkPolicy.validateEndpoint(endpoint);}catch(e){throw fail(e.message,"api_endpoint",{endpoint:safeEndpoint(endpoint)});}
-    if(!apiKey)throw fail("API key is not set","api_config",{endpoint:safeEndpoint(endpoint)});
-    step("endpoint","Endpoint","ok",safeEndpoint(endpoint));step("network","Network","running","Sending request");
-    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),30000);
-    let response,body;
-    try{response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${apiKey}`},body:JSON.stringify({text,prompt,deck,noteType}),signal:controller.signal});}
-    catch(e){step("network","Network","error",e?.name==="AbortError"?"Request timed out":"Could not reach API endpoint");throw fail(e?.name==="AbortError"?"External API request timed out":"External API network error",e?.name==="AbortError"?"api_timeout":"api_network",{endpoint:safeEndpoint(endpoint)});}
-    finally{clearTimeout(timeout);}
-    step("network","Network","ok","Connected");
-    try{body=await response.text();}catch(e){throw fail("Could not read API response","api_response",{endpoint:safeEndpoint(endpoint),httpStatus:response.status});}
-    step("http","HTTP status",response.ok?"ok":"error",String(response.status));
-    step("response","Response body","ok",`Received ${body.length} characters`);
-    if(!response.ok)throw fail(`API returned HTTP ${response.status}`,"api_http",{httpStatus:response.status,rawResponse:body,endpoint:safeEndpoint(endpoint)});
-    try{const parsed=root.AnkiResponseParser.parseDetailed(body);step("json","JSON parsing",parsed.format==="json"?"ok":"skipped",parsed.format==="json"?"Valid JSON":"Plain text response");step("result","Result extraction","ok","Result extracted");return {...parsed,httpStatus:response.status,endpoint:safeEndpoint(endpoint)};}
-    catch(e){const stage=e.code==="invalid-json"?"api_json":"api_result";step(stage==="api_json"?"json":"result",stage==="api_json"?"JSON parsing":"Result extraction","error",e.message);throw fail(e.message,stage,{code:e.code,rawResponse:body,httpStatus:response.status,endpoint:safeEndpoint(endpoint)});}
+    if(!String(endpoint||"").trim())throw fail("API Server / Endpoint is not set","api_config");
+    let routes;try{routes=root.AnkiProviderRouting.buildApiRoutes(endpoint,provider);}catch(e){throw fail(e.message,e.stage||"api_config",{endpoint:safeEndpoint(endpoint)});}
+    let body;try{body=buildApiRequest({provider,model,prompt});}catch(e){throw Object.assign(e,{endpoint:safeEndpoint(routes.chat),provider,model});}
+    const actualEndpoint=safeEndpoint(routes.chat);step("endpoint","Endpoint","ok",actualEndpoint);step("provider","Provider","ok",provider==="openai"?"OpenAI-compatible":"Ollama Native");step("model","Model","ok",model);
+    const headers={"Content-Type":"application/json"};if(provider==="openai"&&apiKey)headers.Authorization="Bearer "+apiKey;
+    log("[API REQUEST]",{provider,endpoint:actualEndpoint,model});const start=now(),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);let response,raw;
+    try{response=await fetch(routes.chat,{method:"POST",headers,body:JSON.stringify(body),signal:controller.signal});}
+    catch(e){const latencyMs=Math.round(now()-start);step("network","Network","error",e?.name==="AbortError"?"Request timed out":"Could not reach "+actualEndpoint);const error=fail(e?.name==="AbortError"?"API request timed out":"API network error",e?.name==="AbortError"?"api_timeout":"api_network",{endpoint:actualEndpoint,provider,model,latencyMs});log("[API]",{provider,endpoint:actualEndpoint,model,error:error.message,latencyMs});throw error;}
+    finally{clearTimeout(timer);}
+    const latencyMs=Math.round(now()-start);step("network","Network","ok","Connected");step("http","HTTP status",response.ok?"ok":"error",String(response.status));try{raw=await response.text();}catch{throw fail("Could not read API response","api_response",{endpoint:actualEndpoint,httpStatus:response.status,provider,model,latencyMs});}
+    if(!response.ok){const e=fail("API returned HTTP "+response.status,"api_http",{endpoint:actualEndpoint,httpStatus:response.status,rawResponse:raw,provider,model,latencyMs});step("http","HTTP status","error",`HTTP ${response.status} — ${actualEndpoint}`);log("[API RESPONSE]",{provider,endpoint:actualEndpoint,model,httpStatus:response.status,latencyMs});throw e;}
+    log("[API RESPONSE]",{provider,endpoint:actualEndpoint,model,httpStatus:response.status,latencyMs});let parsed;try{parsed=root.AnkiResponseParser.parseApiResponse(raw,provider);}catch(e){step("parser","Response parsing","error",e.message);log("[API PARSER]",{provider,model,result:"error",error:e.message});throw Object.assign(fail(e.message,e.stage||"api_parse",{rawResponse:raw,httpStatus:response.status,endpoint:actualEndpoint,provider,model,latencyMs}),{cause:e});}
+    step("parser","Response parsing","ok","Model response extracted");step("result","Result","ok",parsed.instructionValue);log("[API PARSER]",{provider,model,result:"ok",latencyMs});return {...parsed,httpStatus:response.status,endpoint:actualEndpoint,provider,model,latencyMs,requestBody:body};
   }
-  const api={requestDetailed,async request(args){return (await requestDetailed(args)).instructionValue;}};
-  root.AnkiExternalApiClient=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
+  async function fetchModels({endpoint,provider="openai",apiKey=""}){let routes;try{routes=root.AnkiProviderRouting.buildApiRoutes(endpoint,provider);}catch(e){throw fail(e.message,e.stage||"api_config");}if(!routes.models)throw fail("Cannot safely derive Models URL from an endpoint with query or fragment; enter the model manually","api_models");const headers={};if(provider==="openai"&&apiKey)headers.Authorization="Bearer "+apiKey;let response;try{response=await fetch(routes.models,{headers,method:"GET",signal:AbortSignal.timeout?AbortSignal.timeout(12000):undefined});}catch(e){throw fail("Model list request failed: "+e.message,"api_models",{endpoint:safeEndpoint(routes.models)});}if(!response.ok)throw fail("Model list returned HTTP "+response.status,"api_models",{httpStatus:response.status,endpoint:safeEndpoint(routes.models)});let data;try{data=await response.json();}catch{throw fail("Model list response is not valid JSON","api_models",{endpoint:safeEndpoint(routes.models)});}const list=provider==="openai"?data?.data?.map(x=>x?.id).filter(Boolean):data?.models?.map(x=>x?.name||x?.model).filter(Boolean);if(!Array.isArray(list))throw fail("Model list response has an incompatible format","api_models",{endpoint:safeEndpoint(routes.models)});return [...new Set(list)].sort();}
+  const api={buildApiRequest,requestDetailed,fetchModels,async request(args){return(await requestDetailed(args)).instructionValue;}};root.AnkiExternalApiClient=api;if(typeof module!=="undefined"&&module.exports)module.exports=api;
 })(globalThis);

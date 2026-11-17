@@ -2,6 +2,6 @@
 
 Anki Quick Add is a lightweight Chrome Manifest V3 extension for adding selected text to Anki.
 
-The complete extension source is in [anki-quick-add/](anki-quick-add/). Download [anki-quick-add-v1.3.0.zip](anki-quick-add-v1.3.0.zip) to install it unpacked in Chrome.
+The complete extension source is in [anki-quick-add/](anki-quick-add/). Download [anki-quick-add-v1.4.0.zip](anki-quick-add-v1.4.0.zip) to load it unpacked in Chrome.
 
-External API supports prompt substitution with `{{text}}`, HTTP for local/LAN endpoints, and local diagnostic checks. Test Full Flow verifies API response parsing, AnkiConnect, target deck/note type, and field mapping without creating a note.
+External API supports OpenAI-compatible and Ollama Native providers. Enter a server root such as `http://100.75.97.86:8799`; the extension builds the provider's chat route, supports LAN/Tailscale HTTP, and can test the API without creating notes.
